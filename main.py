@@ -79,11 +79,55 @@ class StegoApp(App):
                 # API 33+ permissions
                 perms.extend([Permission.READ_MEDIA_IMAGES, Permission.POST_NOTIFICATIONS])
             except: pass
-            request_permissions(perms, self.start_sentinel_service)
+            request_permissions(perms, self.check_manage_storage)
         else:
             self.start_sentinel_service()
 
-    def start_sentinel_service(self, permissions=None, grants=None):
+    def check_manage_storage(self, permissions=None, grants=None):
+        """On Android 11+, we need to check for MANAGE_EXTERNAL_STORAGE."""
+        if platform == 'android':
+            from jnius import autoclass
+            from android import API_LEVEL
+            
+            if API_LEVEL >= 30:
+                Environment = autoclass('android.os.Environment')
+                if not Environment.isExternalStorageManager():
+                    self.add_log("Need 'All Files Access' to move images.")
+                    self.show_manage_storage_popup()
+                    return
+            
+        self.start_sentinel_service()
+
+    def show_manage_storage_popup(self):
+        content = BoxLayout(orientation='vertical', padding=10, spacing=10)
+        content.add_widget(Label(
+            text="[b]Action Required[/b]\n\n"
+                 "To move images between folders, this app needs "
+                 "'All Files Access'. Please enable it in the next screen.",
+            markup=True, halign='center'
+        ))
+        btn = Button(text="Open Settings", size_hint_y=None, height=40)
+        content.add_widget(btn)
+        popup = Popup(title="Permissions", content=content, size_hint=(0.8, 0.4))
+        
+        def open_settings(inst):
+            from jnius import autoclass
+            from android import mActivity
+            Intent = autoclass('android.content.Intent')
+            Settings = autoclass('android.provider.Settings')
+            Uri = autoclass('android.net.Uri')
+            
+            intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            uri = Uri.parse(f"package:{mActivity.getPackageName()}")
+            intent.setData(uri)
+            mActivity.startActivity(intent)
+            popup.dismiss()
+            self.add_log("Waiting for All Files Access...")
+            
+        btn.bind(on_release=open_settings)
+        popup.open()
+
+    def start_sentinel_service(self, *args):
         self.add_log("Starting service...")
         if platform == 'android':
             try:
