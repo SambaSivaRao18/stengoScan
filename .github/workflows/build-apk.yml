@@ -18,7 +18,7 @@ jobs:
           workdir: .
           buildozer_version: master
         env:
-          USER: runner
+          USER: root
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
